@@ -22,7 +22,7 @@ class DecisionEngine:
 
     def evaluate_detection(self, detection: dict) -> dict:
         """
-        Attach severity to a single detection dict from core/detector.py.
+        Attach severity to a single detection dict from the stage 2 detector.
         Returns the detection dict with a "severity" key added.
         """
         detection["severity"] = self._severity_for(detection["label"])
@@ -85,3 +85,28 @@ class DecisionEngine:
             "camera_id": camera_id,
             "detections": annotated,
         }
+
+    def decide(
+        self,
+        detections: list,
+        station_id: str = None,
+        camera_id: str = None,
+        anomaly_score: float = None,
+        anomaly_threshold: float = None,
+    ) -> dict:
+        decision = self.evaluate(detections, station_id, camera_id)
+        if (
+            decision["result"] == "PASS"
+            and anomaly_score is not None
+            and anomaly_threshold is not None
+            and anomaly_score >= anomaly_threshold
+        ):
+            decision.update(
+                result="FAIL",
+                defect="anomaly",
+                confidence=float(anomaly_score),
+                severity="FAIL",
+            )
+        decision["anomaly_score"] = anomaly_score
+        decision["defect_type"] = decision["defect"]
+        return decision
