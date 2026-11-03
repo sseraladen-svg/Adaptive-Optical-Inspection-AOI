@@ -13,6 +13,7 @@ import pytest
 from pipeline import router as router_module
 from stage_1_preprocessing.preprocessor import Preprocessor
 from stage_3_classification.classifier import Classifier
+from stage_3_classification.train import train as train_classifier
 from stage_4_anomaly.anomaly_detector import AnomalyDetector
 from stage_5_decision.decision_engine import DecisionEngine
 from utils.config_loader import load_config
@@ -93,6 +94,10 @@ def test_config_loading(config: dict[str, Any]) -> None:
         config["training"]["yolo_dataset_config"]
         == "dataset/synthetic_generated/yolo_seg/data.yaml"
     )
+    assert (
+        config["training"]["classifier_dataset_dir"]
+        == "dataset/synthetic_generated/cnn_classifier/train"
+    )
 
 
 def test_router_structure(config: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,6 +176,18 @@ def test_classifier_fails_on_missing_onnx(config: dict[str, Any], tmp_path: Path
     config["models"]["cnn_classifier"] = str(tmp_path / "missing.onnx")
     with pytest.raises(FileNotFoundError, match="CNN ONNX model not found"):
         Classifier(config)
+
+
+def test_classifier_training_uses_configured_crop_directory(
+    config: dict[str, Any], tmp_path: Path
+) -> None:
+    """Classifier training defaults to its configured generated crop directory."""
+    dataset_dir = tmp_path / "configured-crops"
+    config["training"]["classifier_dataset_dir"] = str(dataset_dir)
+
+    with pytest.raises(FileNotFoundError) as error:
+        train_classifier(config)
+    assert str(dataset_dir) in str(error.value)
 
 
 def test_classifier_uses_cpu_onnx_and_preserves_class_mapping(

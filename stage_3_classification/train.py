@@ -16,7 +16,7 @@ from utils.config_loader import load_config
 
 def train(
     config: dict[str, Any],
-    dataset_dir: Path,
+    dataset_dir: Path | None = None,
     epochs: int = 10,
     batch_size: int = 32,
     learning_rate: float = 1e-3,
@@ -27,6 +27,8 @@ def train(
     The dataset layout must be ``dataset_dir/<defect class>/*``. The folder
     names must match the configured defect classes exactly.
     """
+    if dataset_dir is None:
+        dataset_dir = Path(config["training"]["classifier_dataset_dir"])
     if not dataset_dir.is_dir():
         raise FileNotFoundError(f"Defect crop dataset not found: {dataset_dir}")
     if epochs <= 0 or batch_size <= 0 or learning_rate <= 0:
@@ -134,7 +136,7 @@ def main() -> None:
     """Parse training options and train for one configured product."""
     parser = argparse.ArgumentParser(description="Train and export NOX ResNet18 classifier")
     parser.add_argument("--product", default="prismatic_cell")
-    parser.add_argument("--dataset", type=Path, default=Path("datasets/defect_crops"))
+    parser.add_argument("--dataset", type=Path)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
