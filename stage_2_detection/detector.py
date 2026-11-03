@@ -1,66 +1,77 @@
-"""
-core/detector.py
+"""Strict, config-driven YOLO11 segmentation inference."""
 
-Config-driven YOLO segmentation wrapper. Model path and confidence threshold
-come from the product config (config/schema.yaml) — nothing hardcoded.
+from __future__ import annotations
 
-Fixes the schema gap in the original detection/detector.py: each detection
-now includes "bbox" (needed by core/overlay.py and core/decision_engine.py),
-in addition to "label", "confidence", and "mask".
-"""
+from pathlib import Path
+from typing import Any
 
-from ultralytics import YOLO
+import numpy as np
 
 
 class Detector:
-    def __init__(self, config: dict):
-        """
-        config: full loaded product config dict.
-        Reads config["models"]["yolo_seg"] and config["decision_rules"]["fail_confidence_threshold"].
-        """
-        model_path = config["models"]["yolo_seg"]
-        self.conf = config["decision_rules"]["fail_confidence_threshold"]
-        self.class_names = config["defect_classes"]
+    """Run YOLO segmentation and return one standardized record per detection."""
 
-        self.model = YOLO(model_path)
-        print(f"[Detector] Loaded: {model_path} (conf={self.conf})")
+    def __init__(self, config: dict[str, Any]) -> None:
+        """Validate and load the configured YOLO model once at startup."""
+        self.config = config
+        model_path = Path(config["models"]["yolo_seg"])
+        if not model_path.is_file():
+            raise FileNotFoundError(f"YOLO model not found: {model_path}")
 
-    def detect(self, frame):
+        self.confidence_threshold = float(config["detection"]["confidence_threshold"])
+        self.class_names = {int(key): value for key, value in config["defect_classes"].items()}
+        from ultralytics import YOLO
+
+        self.model = YOLO(str(model_path))
+        print(
+            f"[Detector] Loaded {model_path} "
+            f"(confidence threshold={self.confidence_threshold})"
+        )
+
+    def detect(self, frame: np.ndarray) -> list[dict[str, Any]]:
+        """Return detections with label, class id, confidence, bbox, and mask.
+
+        Args:
+            frame: Preprocessed uint8 BGR image with shape (height, width, 3).
+
+        Returns:
+            Detection dictionaries; each bbox is [x1, y1, x2, y2] in pixels.
+            A detection mask is a two-dimensional numpy array, or None when the
+            loaded YOLO model returns boxes without segmentation masks.
         """
-        Run segmentation on a single frame.
-        Returns: (annotated_frame, detections)
+        if not isinstance(frame, np.ndarray) or frame.size == 0:
+            raise ValueError("frame must be a non-empty numpy image")
+        if frame.ndim != 3 or frame.shape[2] != 3:
+            raise ValueError("frame must be a 3-channel BGR image")
 
-        Each detection dict:
-            {
-                "label": str,          # class name from config.defect_classes
-                "class_id": int,
-                "confidence": float,
-                "bbox": [x1, y1, x2, y2],   # int pixel coords
-                "mask": np.ndarray,
-            }
-        """
-        results = self.model(frame, conf=self.conf, verbose=False)
-        detections = []
-
+        results = self.model(
+            frame,
+            conf=self.confidence_threshold,
+            verbose=False,
+        )
+        detections: list[dict[str, Any]] = []
         for result in results:
-            annotated = result.plot()
+            boxes = result.boxes
+            if boxes is None or len(boxes) == 0:
+                continue
+            boxes_xyxy = boxes.xyxy.cpu().numpy()
+            class_ids = boxes.cls.cpu().numpy().astype(int)
+            confidences = boxes.conf.cpu().numpy()
+            masks = result.masks.data.cpu().numpy() if result.masks is not None else None
 
-            if result.masks is not None:
-                for i, mask in enumerate(result.masks.data):
-                    cls_id = int(result.boxes.cls[i])
-                    conf = float(result.boxes.conf[i])
-                    bbox = result.boxes.xyxy[i].cpu().numpy().astype(int).tolist()
-
-                    label = self.class_names.get(cls_id, self.model.names.get(cls_id, str(cls_id)))
-
-                    detections.append({
-                        "label": label,
-                        "class_id": cls_id,
-                        "confidence": round(conf, 2),
-                        "bbox": bbox,
-                        "mask": mask.cpu().numpy(),
-                    })
-
-            return annotated, detections
-
-        return frame, []
+            for index, (bbox, class_id, confidence) in enumerate(
+                zip(boxes_xyxy, class_ids, confidences)
+            ):
+                if class_id not in self.class_names:
+                    raise ValueError(f"YOLO returned unmapped class id: {class_id}")
+                mask = masks[index] if masks is not None else None
+                detections.append(
+                    {
+                        "label": self.class_names[class_id],
+                        "class_id": int(class_id),
+                        "confidence": float(confidence),
+                        "bbox": [int(round(value)) for value in bbox],
+                        "mask": mask,
+                    }
+                )
+        return detections

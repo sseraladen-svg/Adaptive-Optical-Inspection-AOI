@@ -1,112 +1,99 @@
-"""
-core/decision_engine.py
+"""Config-driven aggregation of detector, classifier, and anomaly results."""
 
-Separates AI perception (detector/classifier/anomaly outputs) from
-manufacturing PASS/FAIL logic, as claimed in the pitch deck's architecture.
-All thresholds/severity come from the product config — swapping products
-means swapping config, not this file.
+from __future__ import annotations
 
-This is the single place PASS/FAIL is decided. server.py and main.py must
-call this instead of deciding PASS/FAIL themselves.
-"""
+from typing import Any
 
 
 class DecisionEngine:
-    def __init__(self, config: dict):
-        rules = config["decision_rules"]
-        self.fail_confidence_threshold = rules["fail_confidence_threshold"]
-        self.severity_map = rules["severity_map"]
+    """Apply configured confidence thresholds and severity labels."""
 
-    def _severity_for(self, label: str) -> str:
-        return self.severity_map.get(label, "FAIL")  # unknown class defaults to FAIL, fail-safe
+    def __init__(self, config: dict[str, Any]) -> None:
+        """Read all decision thresholds and labels from the product config."""
+        self.fail_confidence_threshold = float(
+            config["decision_rules"]["fail_confidence_threshold"]
+        )
+        self.severity_map = config["decision_rules"]["severity_map"]
+        self.anomaly_threshold = float(config["anomaly_detection"]["threshold"])
 
-    def evaluate_detection(self, detection: dict) -> dict:
-        """
-        Attach severity to a single detection dict from the stage 2 detector.
-        Returns the detection dict with a "severity" key added.
-        """
-        detection["severity"] = self._severity_for(detection["label"])
-        return detection
-
-    def evaluate(self, detections: list, station_id: str = None, camera_id: str = None) -> dict:
-        """
-        Evaluate a full set of detections for one image/camera capture.
-
-        Returns:
-            {
-                "result": "PASS" | "FAIL",
-                "defect": str,          # top defect label, "None" if PASS
-                "confidence": float,
-                "severity": str,        # "WARN" | "FAIL" | "NONE"
-                "station_id": str | None,
-                "camera_id": str | None,
-                "detections": list,     # each detection annotated with severity
-            }
-        """
-        if not detections:
-            return {
-                "result": "PASS",
-                "defect": "None",
-                "confidence": 1.00,
-                "severity": "NONE",
-                "station_id": station_id,
-                "camera_id": camera_id,
-                "detections": [],
-            }
-
-        annotated = [self.evaluate_detection(d) for d in detections]
-
-        # A single FAIL-severity or above-threshold detection fails the whole capture.
-        fail_hits = [
-            d for d in annotated
-            if d["severity"] == "FAIL" and d["confidence"] >= self.fail_confidence_threshold
-        ]
-
-        if fail_hits:
-            worst = max(fail_hits, key=lambda d: d["confidence"])
-            result = "FAIL"
-            defect = worst["label"]
-            confidence = worst["confidence"]
-            severity = "FAIL"
-        else:
-            # only WARN-severity detections present
-            worst = max(annotated, key=lambda d: d["confidence"])
-            result = "FAIL" if worst["confidence"] >= self.fail_confidence_threshold else "PASS"
-            defect = worst["label"] if result == "FAIL" else "None"
-            confidence = worst["confidence"] if result == "FAIL" else 1.00
-            severity = worst["severity"] if result == "FAIL" else "NONE"
-
+    def evaluate_detection(self, detection: dict[str, Any]) -> dict[str, Any]:
+        """Copy a detection and attach its configured severity and CNN score."""
+        if "label" not in detection or "confidence" not in detection:
+            raise ValueError("each detection must contain label and confidence")
+        label = detection.get("defect_type", detection["label"])
+        severity = self.severity_map.get(label)
+        if severity not in {"WARN", "FAIL"}:
+            raise ValueError(f"No valid configured severity for defect class {label!r}")
         return {
-            "result": result,
-            "defect": defect,
-            "confidence": confidence,
+            **detection,
+            "defect_type": label,
+            "cnn_confidence": float(detection.get("cnn_confidence", detection["confidence"])),
             "severity": severity,
-            "station_id": station_id,
-            "camera_id": camera_id,
-            "detections": annotated,
         }
 
     def decide(
         self,
-        detections: list,
-        station_id: str = None,
-        camera_id: str = None,
-        anomaly_score: float = None,
-        anomaly_threshold: float = None,
-    ) -> dict:
-        decision = self.evaluate(detections, station_id, camera_id)
-        if (
-            decision["result"] == "PASS"
-            and anomaly_score is not None
-            and anomaly_threshold is not None
-            and anomaly_score >= anomaly_threshold
-        ):
-            decision.update(
-                result="FAIL",
-                defect="anomaly",
-                confidence=float(anomaly_score),
-                severity="FAIL",
+        detections: list[dict[str, Any]],
+        anomaly: dict[str, Any],
+        station_id: str,
+        camera_id: str,
+    ) -> dict[str, Any]:
+        """Return the final inspection result after aggregating stages 2-4.
+
+        A result fails when any detection confidence or the normalized anomaly
+        score reaches its configured threshold. Returned detections include
+        configured severity labels for overlay rendering.
+        """
+        if not isinstance(detections, list):
+            raise TypeError("detections must be a list")
+        if not isinstance(anomaly, dict):
+            raise TypeError("anomaly result must be a mapping")
+        for key in ("score", "is_anomaly", "available"):
+            if key not in anomaly:
+                raise ValueError(f"anomaly result is missing {key!r}")
+        if anomaly["available"] is not True:
+            raise RuntimeError("anomaly detector reported unavailable")
+        if not isinstance(anomaly["is_anomaly"], bool):
+            raise TypeError("anomaly is_anomaly must be a boolean")
+        anomaly_score = float(anomaly["score"])
+        if not 0 <= anomaly_score <= 1:
+            raise ValueError("normalized anomaly score must be in [0, 1]")
+        if anomaly["is_anomaly"] != (anomaly_score > self.anomaly_threshold):
+            raise ValueError("anomaly result threshold status does not match config")
+
+        annotated = [self.evaluate_detection(detection) for detection in detections]
+        failing_detections = [
+            detection
+            for detection in annotated
+            if detection["cnn_confidence"] > self.fail_confidence_threshold
+        ]
+        if failing_detections:
+            primary = max(
+                failing_detections,
+                key=lambda detection: detection["cnn_confidence"],
             )
-        decision["anomaly_score"] = anomaly_score
-        decision["defect_type"] = decision["defect"]
-        return decision
+            result = "FAIL"
+            defect = primary["defect_type"]
+            confidence = primary["cnn_confidence"]
+        elif anomaly["is_anomaly"]:
+            result = "FAIL"
+            defect = "anomaly"
+            confidence = anomaly_score
+        else:
+            result = "PASS"
+            defect = "None"
+            confidence = 1.0
+
+        return {
+            "result": result,
+            "defect": defect,
+            "confidence": float(confidence),
+            "severity": "FAIL" if result == "FAIL" else (
+                "WARN" if annotated else "NONE"
+            ),
+            "station_id": station_id,
+            "camera_id": camera_id,
+            "detections": annotated,
+            "anomaly_score": anomaly_score,
+            "anomaly": dict(anomaly),
+        }

@@ -1,50 +1,76 @@
-"""
-core/overlay.py
+"""Draw severity-colored segmentation masks, boxes, and labels on BGR frames."""
 
-Fixes the schema mismatch in the original aoi_overlay.py: that file expected
-d["bbox"], d["severity"], d["class"] but core/detector.py produced
-d["label"], d["confidence"], d["mask"] with no bbox/severity — so it was
-dead code, never callable end to end.
+from __future__ import annotations
 
-Now consumes detections as annotated by core/decision_engine.py:
-{"label", "class_id", "confidence", "bbox", "mask", "severity"}.
-"""
+from typing import Any
 
 import cv2
+import numpy as np
 
-SEVERITY_COLORS = {
-    "FAIL": (0, 0, 255),    # red
-    "WARN": (0, 255, 255),  # yellow
-    "NONE": (0, 255, 0),    # green
+
+_SEVERITY_COLORS = {
+    "FAIL": (0, 0, 255),
+    "WARN": (0, 255, 255),
+    "NONE": (0, 255, 0),
 }
 
 
-def get_color(severity: str):
-    return SEVERITY_COLORS.get(severity, (0, 255, 0))
+def draw_aoi_overlay(
+    frame: np.ndarray,
+    detections: list[dict[str, Any]],
+    mask_alpha: float = 0.25,
+) -> np.ndarray:
+    """Return a copy of frame with masks, bounding boxes, and class labels.
 
-
-def draw_aoi_overlay(frame, detections):
+    Detections use [x1, y1, x2, y2] pixel boxes and optional 2D masks. The
+    caller owns the input frame; it is not modified.
     """
-    detections: list of dicts with "bbox", "severity", "label", "confidence"
-    (i.e. the output of DecisionEngine.evaluate_detection / evaluate()["detections"]).
-    """
-    overlay = frame.copy()
+    if not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] != 3:
+        raise ValueError("overlay frame must be a three-channel BGR numpy image")
+    if not 0 <= mask_alpha <= 1:
+        raise ValueError("mask_alpha must be in [0, 1]")
 
-    for d in detections:
-        x1, y1, x2, y2 = d["bbox"]
-        color = get_color(d["severity"])
+    output = frame.copy()
+    height, width = output.shape[:2]
+    for detection in detections:
+        if "bbox" not in detection or len(detection["bbox"]) != 4:
+            raise ValueError("each detection must contain a four-value bbox")
+        x1, y1, x2, y2 = (int(round(float(value))) for value in detection["bbox"])
+        if x2 <= x1 or y2 <= y1:
+            raise ValueError(f"detection bbox has no area: {detection['bbox']}")
+        severity = detection.get("severity", "FAIL")
+        color = _SEVERITY_COLORS.get(severity)
+        if color is None:
+            raise ValueError(f"unknown detection severity: {severity!r}")
 
-        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+        mask = detection.get("mask")
+        if mask is not None:
+            mask_array = np.asarray(mask)
+            if mask_array.ndim != 2:
+                raise ValueError("detection mask must be a two-dimensional array")
+            resized_mask = cv2.resize(
+                mask_array.astype(np.float32),
+                (width, height),
+                interpolation=cv2.INTER_NEAREST,
+            ) > 0.5
+            color_layer = np.zeros_like(output)
+            color_layer[resized_mask] = color
+            output = cv2.addWeighted(output, 1.0, color_layer, mask_alpha, 0)
 
+        cv2.rectangle(output, (x1, y1), (x2, y2), color, 2)
+        label = detection.get("defect_type", detection.get("label"))
+        if not isinstance(label, str) or not label:
+            raise ValueError("each detection must contain a non-empty label")
+        confidence = float(
+            detection.get("cnn_confidence", detection.get("confidence", 0.0))
+        )
         cv2.putText(
-            overlay,
-            f'{d["label"]}:{d["confidence"]:.2f}',
-            (x1, y1 - 5),
+            output,
+            f"{label}:{confidence:.2f}",
+            (x1, max(y1 - 5, 0)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.5,
             color,
-            1
+            1,
         )
-
-    cv2.addWeighted(overlay, 0.25, frame, 0.75, 0, frame)
-    return frame
+    return output

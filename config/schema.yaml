@@ -1,9 +1,9 @@
 # schema.yaml
 # Documents the required keys for any product config file under config/.
-# Not enforced by a validator library here — core/config_loader.py checks
-# presence of these keys at load time and raises if any are missing.
+# utils/config_loader.py validates required values before the pipeline loads.
 
 product_id: string              # unique product identifier, e.g. "prismatic_cell"
+strict_models: bool             # must be true; missing inference artifacts fail at startup
 
 stations: int                   # number of physical camera stations
 cameras_per_station: int        # cameras per station
@@ -16,11 +16,13 @@ preprocessing:
   resize: [int, int]            # target [width, height]
   blur_kernel: [int, int]       # odd, odd — GaussianBlur kernel size
   clahe: bool                   # apply CLAHE lighting normalization
+  clahe_clip_limit: float
+  clahe_tile_grid_size: [int, int]
 
 models:
   yolo_seg: string              # path to YOLO segmentation weights
-  cnn_classifier: string        # path to CNN classifier weights
-  anomaly: string                # path to anomaly detection weights
+  cnn_classifier: string        # path to ResNet18 ONNX model
+  anomaly: string               # path to trusted pickle feature memory bank
 
 defect_classes:
   <int>: string                 # class_id -> class name, e.g. 0: scratch
@@ -29,3 +31,36 @@ decision_rules:
   fail_confidence_threshold: float   # min confidence to count a detection
   severity_map:
     <class_name>: "WARN" | "FAIL"    # per-class severity used by overlay + decision engine
+
+detection:
+  confidence_threshold: float
+
+classification:
+  input_size: int
+  mean: [float, float, float]
+  std: [float, float, float]
+  onnx_opset: int                  # used by the classifier export script
+
+anomaly_detection:
+  threshold: float                 # normalized anomaly score threshold, [0, 1]
+  distance_scale: float            # positive normalization factor for L2 distances
+  hog:
+    win_size: [int, int]           # full-image window size for each patch embedding
+    patch_stride: [int, int]       # stride between sampled image patches
+    block_size: [int, int]
+    block_stride: [int, int]
+    cell_size: [int, int]
+    bins: int
+
+runtime:
+  data_dir: string                 # runtime images and CSV output directory
+
+training:
+  yolo_base_model: string          # locally provisioned pretrained YOLO segmentation weights
+  yolo_dataset_config: string      # Ultralytics dataset YAML
+  yolo_run_dir: string             # training run output directory
+  yolo_epochs: int
+  yolo_image_size: int
+  yolo_batch_size: int
+  yolo_workers: int
+  yolo_device: string              # e.g. "cpu", "0", or "0,1"
