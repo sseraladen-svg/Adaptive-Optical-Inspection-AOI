@@ -126,6 +126,7 @@ def train(
         output_names=["logits"],
         dynamic_axes={"images": {0: "batch"}, "logits": {0: "batch"}},
         opset_version=int(classification["onnx_opset"]),
+        dynamo=False,
     )
     print(f"Saved checkpoint: {checkpoint_path}")
     print(f"Exported ONNX classifier: {output_path}")
