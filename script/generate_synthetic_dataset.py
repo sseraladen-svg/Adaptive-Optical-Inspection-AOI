@@ -18,36 +18,18 @@ Usage:
 """
 
 import argparse
-import os
 import random
+from pathlib import Path
 
 import cv2
 import numpy as np
+import yaml
 
-BASE_DIR = "dataset/synthetic_base"
-OUT_ROOT = "dataset/synthetic_generated"
-
-YOLO_IMG_TRAIN = os.path.join(OUT_ROOT, "yolo_seg", "images", "train")
-YOLO_IMG_VAL = os.path.join(OUT_ROOT, "yolo_seg", "images", "val")
-YOLO_LBL_TRAIN = os.path.join(OUT_ROOT, "yolo_seg", "labels", "train")
-YOLO_LBL_VAL = os.path.join(OUT_ROOT, "yolo_seg", "labels", "val")
-
-CNN_TRAIN = os.path.join(OUT_ROOT, "cnn_classifier", "train")
-CNN_VAL = os.path.join(OUT_ROOT, "cnn_classifier", "val")
-
-ANOMALY_GOOD_TRAIN = os.path.join(OUT_ROOT, "anomaly", "train", "good")
-ANOMALY_GOOD_VAL = os.path.join(OUT_ROOT, "anomaly", "val", "good")
+BASE_DIR = Path("dataset/synthetic_base")
+OUT_ROOT = Path("dataset/synthetic_generated")
 
 # class_id -> name, must match config/prismatic_cell.yaml defect_classes
 CLASSES = {0: "scratch", 1: "dust", 2: "stain", 3: "unclassified"}
-
-for p in [YOLO_IMG_TRAIN, YOLO_IMG_VAL, YOLO_LBL_TRAIN, YOLO_LBL_VAL,
-          ANOMALY_GOOD_TRAIN, ANOMALY_GOOD_VAL]:
-    os.makedirs(p, exist_ok=True)
-
-for split_dir in [CNN_TRAIN, CNN_VAL]:
-    for cls_name in CLASSES.values():
-        os.makedirs(os.path.join(split_dir, cls_name), exist_ok=True)
 
 
 # ==========================================================
@@ -203,23 +185,56 @@ def augment(img: np.ndarray) -> np.ndarray:
 # Main generation loop
 # ==========================================================
 
-def load_base_images():
+def load_base_images(base_dir: Path = BASE_DIR) -> list[np.ndarray]:
     bases = []
-    for fname in os.listdir(BASE_DIR):
-        if fname.lower().endswith((".png", ".jpg", ".jpeg")):
-            img = cv2.imread(os.path.join(BASE_DIR, fname))
+    for image_path in sorted(base_dir.iterdir()):
+        if image_path.suffix.lower() in {".png", ".jpg", ".jpeg"}:
+            img = cv2.imread(str(image_path))
             if img is not None:
                 bases.append(img)
     if not bases:
-        raise FileNotFoundError(f"No base images found in {BASE_DIR}")
+        raise FileNotFoundError(f"No readable base images found in {base_dir}")
     return bases
 
 
-def generate(count: int, val_split: float = 0.15):
-    bases = load_base_images()
-    print(f"[synthetic] Loaded {len(bases)} base image(s) from {BASE_DIR}")
+def generate(
+    count: int,
+    val_split: float = 0.15,
+    base_dir: Path = BASE_DIR,
+    output_root: Path = OUT_ROOT,
+    seed: int = 42,
+) -> Path:
+    if count < 2:
+        raise ValueError("count must be at least 2 for train/validation data")
+    if not 0 < val_split < 1:
+        raise ValueError("val_split must be between 0 and 1")
+    if not base_dir.is_dir():
+        raise FileNotFoundError(f"Base-image directory not found: {base_dir}")
+
+    random.seed(seed)
+    np.random.seed(seed)
+    bases = load_base_images(base_dir)
+    print(f"[synthetic] Loaded {len(bases)} base image(s) from {base_dir}")
 
     n_val = int(count * val_split)
+    if n_val == 0:
+        raise ValueError("count and val_split must produce at least one validation image")
+
+    directories = {
+        "yolo_images_train": output_root / "yolo_seg" / "images" / "train",
+        "yolo_images_val": output_root / "yolo_seg" / "images" / "val",
+        "yolo_labels_train": output_root / "yolo_seg" / "labels" / "train",
+        "yolo_labels_val": output_root / "yolo_seg" / "labels" / "val",
+        "cnn_train": output_root / "cnn_classifier" / "train",
+        "cnn_val": output_root / "cnn_classifier" / "val",
+        "anomaly_train": output_root / "anomaly" / "train" / "good",
+        "anomaly_val": output_root / "anomaly" / "val" / "good",
+    }
+    for directory in directories.values():
+        directory.mkdir(parents=True, exist_ok=True)
+    for split in ("cnn_train", "cnn_val"):
+        for class_name in CLASSES.values():
+            (directories[split] / class_name).mkdir(parents=True, exist_ok=True)
 
     for i in range(count):
         is_val = i < n_val
@@ -257,37 +272,55 @@ def generate(count: int, val_split: float = 0.15):
 
         img = augment(img)
 
-        img_dir = YOLO_IMG_VAL if is_val else YOLO_IMG_TRAIN
-        lbl_dir = YOLO_LBL_VAL if is_val else YOLO_LBL_TRAIN
-        cnn_dir = CNN_VAL if is_val else CNN_TRAIN
-        anomaly_dir = ANOMALY_GOOD_VAL if is_val else ANOMALY_GOOD_TRAIN
+        image_dir = directories["yolo_images_val" if is_val else "yolo_images_train"]
+        label_dir = directories["yolo_labels_val" if is_val else "yolo_labels_train"]
+        cnn_dir = directories["cnn_val" if is_val else "cnn_train"]
+        anomaly_dir = directories["anomaly_val" if is_val else "anomaly_train"]
 
         fname = f"synth_{i:05d}"
-        cv2.imwrite(os.path.join(img_dir, f"{fname}.jpg"), img)
+        if not cv2.imwrite(str(image_dir / f"{fname}.jpg"), img):
+            raise OSError(f"Could not write synthetic image {fname}")
 
-        with open(os.path.join(lbl_dir, f"{fname}.txt"), "w") as f:
+        with (label_dir / f"{fname}.txt").open("w", encoding="utf-8") as f:
             f.write("\n".join(yolo_lines))
 
         if is_good:
-            cv2.imwrite(os.path.join(anomaly_dir, f"{fname}.jpg"), img)
+            if not cv2.imwrite(str(anomaly_dir / f"{fname}.jpg"), img):
+                raise OSError(f"Could not write normal synthetic image {fname}")
 
         for j, (class_id, crop) in enumerate(crops):
             cls_name = CLASSES[class_id]
             crop_resized = cv2.resize(crop, (224, 224))
-            cv2.imwrite(os.path.join(cnn_dir, cls_name, f"{fname}_{j}.jpg"), crop_resized)
+            if not cv2.imwrite(str(cnn_dir / cls_name / f"{fname}_{j}.jpg"), crop_resized):
+                raise OSError(f"Could not write synthetic crop {fname}_{j}")
 
+    yolo_root = (output_root / "yolo_seg").resolve()
+    data_config_path = yolo_root / "data.yaml"
+    with data_config_path.open("w", encoding="utf-8") as config_file:
+        yaml.safe_dump(
+            {
+                "path": str(yolo_root),
+                "train": "images/train",
+                "val": "images/val",
+                "names": CLASSES,
+            },
+            config_file,
+            sort_keys=False,
+        )
     print(f"[synthetic] Generated {count} images ({n_val} val / {count - n_val} train)")
-    print(f"[synthetic] YOLO seg data:    {OUT_ROOT}/yolo_seg/")
-    print(f"[synthetic] CNN classifier:   {OUT_ROOT}/cnn_classifier/")
-    print(f"[synthetic] Anomaly (good):   {OUT_ROOT}/anomaly/")
+    print(f"[synthetic] YOLO seg config:  {data_config_path}")
+    print(f"[synthetic] CNN classifier:   {output_root / 'cnn_classifier'}")
+    print(f"[synthetic] Anomaly (good):   {output_root / 'anomaly'}")
+    return data_config_path
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--count", type=int, default=300, help="Total number of synthetic images to generate")
+    parser.add_argument("--base-dir", type=Path, default=BASE_DIR)
+    parser.add_argument("--output-dir", type=Path, default=OUT_ROOT)
+    parser.add_argument("--val-split", type=float, default=0.15)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    random.seed(42)
-    np.random.seed(42)
-
-    generate(args.count)
+    generate(args.count, args.val_split, args.base_dir, args.output_dir, args.seed)
