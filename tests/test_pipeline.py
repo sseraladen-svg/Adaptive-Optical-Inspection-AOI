@@ -322,6 +322,46 @@ def test_anomaly_memory_bank_round_trip(config: dict[str, Any], tmp_path: Path) 
     assert result["is_anomaly"] is False
 
 
+def test_anomaly_memory_bank_respects_configured_sample_cap(
+    config: dict[str, Any], tmp_path: Path
+) -> None:
+    config["anomaly_detection"]["max_memory_bank_samples"] = 3
+    frames = [
+        np.full((256, 256, 3), value, dtype=np.uint8)
+        for value in (0, 64, 128, 192)
+    ]
+    memory_bank_path = tmp_path / "capped_memory_bank.pkl"
+    AnomalyDetector.save_memory_bank(frames, memory_bank_path, config)
+    config["models"]["anomaly"] = str(memory_bank_path)
+
+    detector = AnomalyDetector(config)
+
+    assert detector.memory_bank.shape == (3, detector.hog.getDescriptorSize())
+
+
+def test_anomaly_vectorized_nearest_neighbor_matches_direct_distances(
+    config: dict[str, Any], tmp_path: Path
+) -> None:
+    frame = np.full((256, 256, 3), 80, dtype=np.uint8)
+    memory_bank_path = tmp_path / "reference_memory_bank.pkl"
+    AnomalyDetector.save_memory_bank([frame], memory_bank_path, config)
+    config["models"]["anomaly"] = str(memory_bank_path)
+    detector = AnomalyDetector(config)
+
+    patch_features = detector.extract_features(frame)
+    direct_distances = [
+        np.min(np.linalg.norm(detector.memory_bank - feature, axis=1))
+        for feature in patch_features
+    ]
+    expected_score = max(direct_distances) / (
+        max(direct_distances) + detector.distance_scale
+    )
+
+    result = detector.predict(frame)
+
+    assert result["score"] == pytest.approx(expected_score, abs=1e-6)
+
+
 def test_anomaly_fails_on_missing_pickle(config: dict[str, Any], tmp_path: Path) -> None:
     """Anomaly stage fails at initialization when its configured bank is absent."""
     config["models"]["anomaly"] = str(tmp_path / "missing.pkl")

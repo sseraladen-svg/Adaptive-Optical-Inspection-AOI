@@ -139,6 +139,7 @@ def load_config(product_id: str, config_dir: str | Path = "config") -> dict[str,
     classification.setdefault("onnx_opset", 17)
     anomaly.setdefault("threshold", 0.5)
     anomaly.setdefault("distance_scale", 1.0)
+    anomaly.setdefault("max_memory_bank_samples", 512)
     anomaly.setdefault("hog", {})
     runtime.setdefault("data_dir", "data")
 
@@ -148,6 +149,10 @@ def load_config(product_id: str, config_dir: str | Path = "config") -> dict[str,
         raise ValueError(f"{path}: anomaly_detection.threshold must be in [0, 1]")
     if float(anomaly["distance_scale"]) <= 0:
         raise ValueError(f"{path}: anomaly_detection.distance_scale must be positive")
+    if int(anomaly["max_memory_bank_samples"]) <= 0:
+        raise ValueError(
+            f"{path}: anomaly_detection.max_memory_bank_samples must be positive"
+        )
     if not isinstance(runtime["data_dir"], str) or not runtime["data_dir"].strip():
         raise ValueError(f"{path}: runtime.data_dir must be a non-empty path")
 

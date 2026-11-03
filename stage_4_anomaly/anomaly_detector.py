@@ -31,6 +31,7 @@ class AnomalyDetector:
         hog_config = anomaly_config["hog"]
         self.threshold = float(anomaly_config["threshold"])
         self.distance_scale = float(anomaly_config["distance_scale"])
+        self.max_memory_bank_samples = int(anomaly_config["max_memory_bank_samples"])
         self.win_size = tuple(int(value) for value in hog_config["win_size"])
         self.patch_stride = tuple(int(value) for value in hog_config["patch_stride"])
         self.block_size = tuple(int(value) for value in hog_config["block_size"])
@@ -58,9 +59,14 @@ class AnomalyDetector:
                 f"Anomaly memory bank feature size {memory_bank.shape[1]} does not "
                 f"match configured HOG descriptor size {expected_size}"
             )
+        if self.max_memory_bank_samples <= 0:
+            raise ValueError("Anomaly max_memory_bank_samples must be positive")
         if not 0 <= self.threshold <= 1 or self.distance_scale <= 0:
             raise ValueError("Anomaly threshold must be [0, 1] and distance_scale positive")
-        self.memory_bank = memory_bank
+        self.memory_bank = self._limit_memory_bank(
+            memory_bank,
+            self.max_memory_bank_samples,
+        )
 
     def _validate_hog_config(self) -> None:
         """Reject invalid or incompatible configured HOG geometry."""
@@ -155,13 +161,18 @@ class AnomalyDetector:
         patch_features = self.extract_features(frame)
         if patch_features.size == 0 or self.memory_bank.size == 0:
             raise ValueError("Nearest-neighbor search returned no valid distances")
-        nearest_distances = []
-        for feature in patch_features:
-            distances = np.linalg.norm(self.memory_bank - feature, axis=1)
-            if distances.size == 0 or not np.all(np.isfinite(distances)):
-                raise ValueError("Nearest-neighbor search returned invalid distances")
-            nearest_distances.append(float(np.min(distances)))
-        maximum_patch_distance = max(nearest_distances)
+        patch_norms = np.einsum("ij,ij->i", patch_features, patch_features)[:, None]
+        bank_norms = np.einsum("ij,ij->i", self.memory_bank, self.memory_bank)[None, :]
+        squared_distances = (
+            patch_norms
+            + bank_norms
+            - 2.0 * (patch_features @ self.memory_bank.T)
+        )
+        if not np.all(np.isfinite(squared_distances)):
+            raise ValueError("Nearest-neighbor search returned invalid distances")
+        np.maximum(squared_distances, 0, out=squared_distances)
+        nearest_distances = np.sqrt(np.min(squared_distances, axis=1))
+        maximum_patch_distance = float(np.max(nearest_distances))
         score = maximum_patch_distance / (
             maximum_patch_distance + self.distance_scale
         )
@@ -170,6 +181,19 @@ class AnomalyDetector:
             "is_anomaly": bool(score > self.threshold),
             "available": True,
         }
+
+    @staticmethod
+    def _limit_memory_bank(memory_bank: np.ndarray, maximum_samples: int) -> np.ndarray:
+        """Uniformly sample templates so bank size stays within its configured cap."""
+        if len(memory_bank) <= maximum_samples:
+            return memory_bank
+        indices = np.linspace(
+            0,
+            len(memory_bank) - 1,
+            num=maximum_samples,
+            dtype=np.intp,
+        )
+        return memory_bank[indices]
 
     @classmethod
     def save_memory_bank(
@@ -191,6 +215,10 @@ class AnomalyDetector:
         if not features:
             raise ValueError("At least one normal image is required for a memory bank")
         bank = np.concatenate(features, axis=0).astype(np.float32)
+        bank = cls._limit_memory_bank(
+            bank,
+            int(anomaly_config["max_memory_bank_samples"]),
+        )
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as model_file:

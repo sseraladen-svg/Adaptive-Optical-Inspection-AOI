@@ -44,6 +44,7 @@ classification:
 anomaly_detection:
   threshold: float                 # normalized anomaly score threshold, [0, 1]
   distance_scale: float            # positive normalization factor for L2 distances
+  max_memory_bank_samples: int     # cap HOG templates for bounded CPU nearest-neighbor work
   hog:
     win_size: [int, int]           # full-image window size for each patch embedding
     patch_stride: [int, int]       # stride between sampled image patches

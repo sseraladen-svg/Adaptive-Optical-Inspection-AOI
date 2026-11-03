@@ -31,6 +31,7 @@ classification:
 anomaly_detection:
   threshold: 0.5
   distance_scale: 1.0
+  max_memory_bank_samples: 512
   hog:
     win_size: [128, 128]
     patch_stride: [64, 64]
