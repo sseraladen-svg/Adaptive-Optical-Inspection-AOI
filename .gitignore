@@ -1,6 +1,7 @@
 dataset/synthetic_generated/
 data/
 models/**/*.pt
+models/**/*.pth
 models/**/*.onnx
 models/**/*.pkl
 runs/
