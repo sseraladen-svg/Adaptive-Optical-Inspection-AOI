@@ -1,6 +1,7 @@
 Flask
 numpy
 onnx
+onnxscript
 onnxruntime
 opencv-python
 PyYAML
