@@ -53,9 +53,15 @@ def draw_aoi_overlay(
                 (width, height),
                 interpolation=cv2.INTER_NEAREST,
             ) > 0.5
-            color_layer = np.zeros_like(output)
-            color_layer[resized_mask] = color
-            output = cv2.addWeighted(output, 1.0, color_layer, mask_alpha, 0)
+            if mask_alpha > 0 and np.any(resized_mask):
+                blended = cv2.addWeighted(
+                    output,
+                    1.0 - mask_alpha,
+                    np.full_like(output, color),
+                    mask_alpha,
+                    0,
+                )
+                output[resized_mask] = blended[resized_mask]
 
         cv2.rectangle(output, (x1, y1), (x2, y2), color, 2)
         label = detection.get("defect_type", detection.get("label"))

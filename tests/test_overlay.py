@@ -1,0 +1,31 @@
+import numpy as np
+import pytest
+
+from utils.overlay import draw_aoi_overlay
+
+
+@pytest.mark.parametrize(
+    ("severity", "expected_color"),
+    [
+        ("FAIL", (0, 0, 64)),
+        ("WARN", (0, 64, 64)),
+    ],
+)
+def test_mask_uses_alpha_blend_only_inside_mask(
+    severity: str, expected_color: tuple[int, int, int]
+) -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    mask = np.zeros((4, 4), dtype=np.uint8)
+    mask[1:3, 1:3] = 1
+    detection = {
+        "bbox": [1, 1, 6, 6],
+        "label": "scratch",
+        "severity": severity,
+        "mask": mask,
+    }
+
+    annotated = draw_aoi_overlay(frame, [detection], mask_alpha=0.25)
+
+    np.testing.assert_array_equal(annotated[3, 3], expected_color)
+    np.testing.assert_array_equal(annotated[0, 0], (0, 0, 0))
+    np.testing.assert_array_equal(frame, np.zeros_like(frame))
