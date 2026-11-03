@@ -1,4 +1,8 @@
 dataset/synthetic_generated/
 data/
+models/**/*.pt
+models/**/*.onnx
+models/**/*.pkl
+runs/
 __pycache__/
 *.pyc
