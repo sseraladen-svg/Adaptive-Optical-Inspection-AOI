@@ -44,7 +44,7 @@ runtime:
 
 training:
   yolo_base_model: models/yolo11n-seg.pt
-  yolo_dataset_config: dataset/yolo_seg/data.yaml
+  yolo_dataset_config: dataset/synthetic_generated/yolo_seg/data.yaml
   yolo_run_dir: runs/train
   yolo_epochs: 100
   yolo_image_size: 640

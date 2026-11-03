@@ -89,6 +89,10 @@ def test_config_loading(config: dict[str, Any]) -> None:
     assert config["strict_models"] is True
     assert config["defect_classes"][0] == "scratch"
     assert config["models"]["cnn_classifier"].endswith(".onnx")
+    assert (
+        config["training"]["yolo_dataset_config"]
+        == "dataset/synthetic_generated/yolo_seg/data.yaml"
+    )
 
 
 def test_router_structure(config: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
