@@ -60,6 +60,7 @@ training:
   yolo_dataset_config: string      # Ultralytics dataset YAML
   yolo_run_dir: string             # training run output directory
   classifier_dataset_dir: string   # class-named crop folders for ResNet18 training
+  normal_image_dir: string         # defect-free frames for anomaly-bank creation
   yolo_epochs: int
   yolo_image_size: int
   yolo_batch_size: int

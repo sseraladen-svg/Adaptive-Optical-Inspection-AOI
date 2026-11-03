@@ -197,27 +197,21 @@ class AnomalyDetector:
             pickle.dump({"memory_bank": bank}, model_file, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def main() -> None:
-    """Build the configured pickle bank from a directory of normal images."""
+def build_memory_bank(config: dict[str, Any], normal_dir: Path) -> Path:
+    """Build the configured anomaly bank from normal full-frame images."""
     from stage_1_preprocessing.preprocessor import Preprocessor
-    from utils.config_loader import load_config
 
-    parser = argparse.ArgumentParser(description="Build a NOX normal patch memory bank")
-    parser.add_argument("--product", default="prismatic_cell")
-    parser.add_argument("--normal-dir", type=Path, required=True)
-    args = parser.parse_args()
-    if not args.normal_dir.is_dir():
-        raise FileNotFoundError(f"Normal-image directory not found: {args.normal_dir}")
+    if not normal_dir.is_dir():
+        raise FileNotFoundError(f"Normal-image directory not found: {normal_dir}")
 
-    config = load_config(args.product)
     preprocessor = Preprocessor(config)
     image_paths = sorted(
         path
-        for path in args.normal_dir.rglob("*")
+        for path in normal_dir.rglob("*")
         if path.is_file() and path.suffix.lower() in {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff"}
     )
     if not image_paths:
-        raise FileNotFoundError(f"No supported normal images found in {args.normal_dir}")
+        raise FileNotFoundError(f"No supported normal images found in {normal_dir}")
 
     def frames() -> Iterator[np.ndarray]:
         for image_path in image_paths:
@@ -229,6 +223,20 @@ def main() -> None:
     output_path = Path(config["models"]["anomaly"])
     AnomalyDetector.save_memory_bank(frames(), output_path, config)
     print(f"Saved normal patch memory bank from {len(image_paths)} images to {output_path}")
+    return output_path
+
+
+def main() -> None:
+    """Build the configured pickle bank from a directory of normal images."""
+    from utils.config_loader import load_config
+
+    parser = argparse.ArgumentParser(description="Build a NOX normal patch memory bank")
+    parser.add_argument("--product", default="prismatic_cell")
+    parser.add_argument("--normal-dir", type=Path)
+    args = parser.parse_args()
+    config = load_config(args.product)
+    normal_dir = args.normal_dir or Path(config["training"]["normal_image_dir"])
+    build_memory_bank(config, normal_dir)
 
 
 if __name__ == "__main__":

@@ -47,6 +47,7 @@ training:
   yolo_dataset_config: dataset/synthetic_generated/yolo_seg/data.yaml
   yolo_run_dir: runs/train
   classifier_dataset_dir: dataset/synthetic_generated/cnn_classifier/train
+  normal_image_dir: dataset/synthetic_generated/anomaly/train/good
   yolo_epochs: 100
   yolo_image_size: 640
   yolo_batch_size: 8

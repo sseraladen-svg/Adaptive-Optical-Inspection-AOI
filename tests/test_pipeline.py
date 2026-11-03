@@ -15,6 +15,7 @@ from stage_1_preprocessing.preprocessor import Preprocessor
 from stage_3_classification.classifier import Classifier
 from stage_3_classification.train import train as train_classifier
 from stage_4_anomaly.anomaly_detector import AnomalyDetector
+from stage_4_anomaly.anomaly_detector import build_memory_bank
 from stage_5_decision.decision_engine import DecisionEngine
 from utils.config_loader import load_config
 
@@ -97,6 +98,10 @@ def test_config_loading(config: dict[str, Any]) -> None:
     assert (
         config["training"]["classifier_dataset_dir"]
         == "dataset/synthetic_generated/cnn_classifier/train"
+    )
+    assert (
+        config["training"]["normal_image_dir"]
+        == "dataset/synthetic_generated/anomaly/train/good"
     )
 
 
@@ -322,6 +327,16 @@ def test_anomaly_fails_on_missing_pickle(config: dict[str, Any], tmp_path: Path)
     config["models"]["anomaly"] = str(tmp_path / "missing.pkl")
     with pytest.raises(FileNotFoundError, match="Anomaly memory bank not found"):
         AnomalyDetector(config)
+
+
+def test_anomaly_bank_builder_uses_explicit_normal_image_directory(
+    config: dict[str, Any], tmp_path: Path
+) -> None:
+    """Bank generation fails with its selected source directory, not a fallback."""
+    normal_dir = tmp_path / "configured-normal-images"
+    with pytest.raises(FileNotFoundError) as error:
+        build_memory_bank(config, normal_dir)
+    assert str(normal_dir) in str(error.value)
 
 
 def test_anomaly_rejects_empty_memory_bank(config: dict[str, Any], tmp_path: Path) -> None:
