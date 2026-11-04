@@ -162,6 +162,20 @@ A practical approach is:
 - then add a CNN classifier for defect type classification
 - finally connect the classifier to the server output
 
+## Verify Models and Batch Run
+
+Check that every model file loads and matches the config (detector classes, classifier output width, anomaly bank settings):
+
+```powershell
+python -m tools.check_weights --product prismatic_cell
+```
+
+Run the whole pipeline over a folder of images, without the server:
+
+```powershell
+python -m tools.run_folder --product prismatic_cell --images C:\path\to\images --out data\folder_run
+```
+
 ## License
 
 This project is intended for educational, research, and experimental use.
