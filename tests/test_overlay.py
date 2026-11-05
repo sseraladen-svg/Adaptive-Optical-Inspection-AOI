@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+import cv2
 from utils.overlay import draw_aoi_overlay
 
 
@@ -176,3 +177,26 @@ def test_none_severity_uses_green_box() -> None:
     )
 
     assert tuple(annotated[2, 3]) == (0, 255, 0)
+
+
+def test_classifier_label_is_preferred_in_overlay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    labels: list[str] = []
+    monkeypatch.setattr(
+        cv2,
+        "putText",
+        lambda _image, text, *_args, **_kwargs: labels.append(text),
+    )
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    detection = {
+        "bbox": [2, 2, 5, 5],
+        "label": "unclassified",
+        "defect_type": "scratch",
+        "confidence": 0.6,
+        "cnn_confidence": 0.9,
+    }
+
+    draw_aoi_overlay(frame, [detection])
+
+    assert labels == ["scratch:0.90"]
