@@ -220,3 +220,12 @@ def test_overlay_rejects_malformed_bbox_container(bbox: object) -> None:
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
     with pytest.raises(ValueError, match="four-value bbox"):
         draw_aoi_overlay(frame, [{"bbox": bbox, "label": "scratch"}])  # type: ignore[list-item]
+
+
+def test_overlay_reports_non_numeric_bbox_values() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="must be numeric"):
+        draw_aoi_overlay(
+            frame,
+            [{"bbox": ["left", 1, 6, 6], "label": "scratch"}],
+        )

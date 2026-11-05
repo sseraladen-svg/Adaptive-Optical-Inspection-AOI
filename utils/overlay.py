@@ -44,7 +44,10 @@ def draw_aoi_overlay(
         bbox_values = detection.get("bbox")
         if not isinstance(bbox_values, (list, tuple)) or len(bbox_values) != 4:
             raise ValueError("each detection must contain a four-value bbox")
-        bbox = tuple(float(value) for value in bbox_values)
+        try:
+            bbox = tuple(float(value) for value in bbox_values)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("detection bbox values must be numeric") from exc
         if not all(math.isfinite(value) for value in bbox):
             raise ValueError(f"detection bbox must contain finite values: {bbox}")
         x1, y1, x2, y2 = (int(round(value)) for value in bbox)
