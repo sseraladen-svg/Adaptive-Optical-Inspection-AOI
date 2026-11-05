@@ -49,6 +49,10 @@ def draw_aoi_overlay(
         x1, y1, x2, y2 = (int(round(value)) for value in bbox)
         if x2 <= x1 or y2 <= y1:
             raise ValueError(f"detection bbox has no area: {detection['bbox']}")
+        x1, x2 = max(0, min(width - 1, x1)), max(0, min(width - 1, x2))
+        y1, y2 = max(0, min(height - 1, y1)), max(0, min(height - 1, y2))
+        if x2 <= x1 or y2 <= y1:
+            continue
         severity = detection.get("severity", "FAIL")
         color = _SEVERITY_COLORS.get(severity)
         if color is None:

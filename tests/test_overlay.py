@@ -52,3 +52,22 @@ def test_overlay_rejects_non_finite_bbox() -> None:
     detection = {"bbox": [1, 1, np.inf, 6], "label": "scratch"}
     with pytest.raises(ValueError, match="finite"):
         draw_aoi_overlay(frame, [detection])
+
+
+def test_overlay_clips_bbox_to_frame() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    annotated = draw_aoi_overlay(
+        frame,
+        [{"bbox": [-4, -4, 4, 4], "label": "scratch"}],
+    )
+    assert np.any(annotated[0, :5])
+    assert np.any(annotated[:5, 0])
+
+
+def test_overlay_ignores_bbox_outside_frame() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    annotated = draw_aoi_overlay(
+        frame,
+        [{"bbox": [20, 20, 24, 24], "label": "scratch"}],
+    )
+    np.testing.assert_array_equal(annotated, frame)
