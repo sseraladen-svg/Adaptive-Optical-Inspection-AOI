@@ -246,3 +246,9 @@ def test_overlay_requires_detection_mappings() -> None:
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
     with pytest.raises(TypeError, match="each detection must be a mapping"):
         draw_aoi_overlay(frame, [None])  # type: ignore[list-item]
+
+
+def test_overlay_requires_label_for_visible_detection() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="non-empty label"):
+        draw_aoi_overlay(frame, [{"bbox": [1, 1, 6, 6]}])
