@@ -33,6 +33,8 @@ def draw_aoi_overlay(
         or frame.shape[2] != 3
     ):
         raise ValueError("overlay frame must be a three-channel BGR numpy image")
+    if not isinstance(detections, list):
+        raise TypeError("detections must be a list")
     if not math.isfinite(mask_alpha) or not 0 <= mask_alpha <= 1:
         raise ValueError("mask_alpha must be in [0, 1]")
 

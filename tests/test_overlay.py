@@ -40,3 +40,8 @@ def test_overlay_rejects_non_finite_mask_alpha() -> None:
 def test_overlay_rejects_empty_frame() -> None:
     with pytest.raises(ValueError, match="three-channel BGR"):
         draw_aoi_overlay(np.zeros((0, 0, 3), dtype=np.uint8), [])
+
+
+def test_overlay_requires_detection_list() -> None:
+    with pytest.raises(TypeError, match="detections must be a list"):
+        draw_aoi_overlay(np.zeros((8, 8, 3), dtype=np.uint8), None)  # type: ignore[arg-type]
