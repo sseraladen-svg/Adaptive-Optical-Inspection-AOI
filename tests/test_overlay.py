@@ -35,3 +35,8 @@ def test_overlay_rejects_non_finite_mask_alpha() -> None:
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
     with pytest.raises(ValueError, match="mask_alpha"):
         draw_aoi_overlay(frame, [], mask_alpha=float("nan"))
+
+
+def test_overlay_rejects_empty_frame() -> None:
+    with pytest.raises(ValueError, match="three-channel BGR"):
+        draw_aoi_overlay(np.zeros((0, 0, 3), dtype=np.uint8), [])

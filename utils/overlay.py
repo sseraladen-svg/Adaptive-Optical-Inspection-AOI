@@ -26,7 +26,12 @@ def draw_aoi_overlay(
     Detections use [x1, y1, x2, y2] pixel boxes and optional 2D masks. The
     caller owns the input frame; it is not modified.
     """
-    if not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] != 3:
+    if (
+        not isinstance(frame, np.ndarray)
+        or frame.size == 0
+        or frame.ndim != 3
+        or frame.shape[2] != 3
+    ):
         raise ValueError("overlay frame must be a three-channel BGR numpy image")
     if not math.isfinite(mask_alpha) or not 0 <= mask_alpha <= 1:
         raise ValueError("mask_alpha must be in [0, 1]")
