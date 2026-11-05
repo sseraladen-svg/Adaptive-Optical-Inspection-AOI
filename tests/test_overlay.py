@@ -166,3 +166,13 @@ def test_mask_alpha_blends_with_existing_frame_color() -> None:
     annotated = draw_aoi_overlay(frame, [detection], mask_alpha=0.25)
 
     np.testing.assert_array_equal(annotated[0, 0], (191, 191, 255))
+
+
+def test_none_severity_uses_green_box() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    annotated = draw_aoi_overlay(
+        frame,
+        [{"bbox": [2, 2, 5, 5], "label": "clear", "severity": "NONE"}],
+    )
+
+    assert tuple(annotated[2, 3]) == (0, 255, 0)
