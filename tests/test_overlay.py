@@ -200,3 +200,16 @@ def test_classifier_label_is_preferred_in_overlay(
     draw_aoi_overlay(frame, [detection])
 
     assert labels == ["scratch:0.90"]
+
+
+def test_overlapping_masks_blend_in_detection_order() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    mask = np.ones((8, 8), dtype=np.uint8)
+    detections = [
+        {"bbox": [1, 1, 6, 6], "label": "scratch", "severity": "FAIL", "mask": mask},
+        {"bbox": [1, 1, 6, 6], "label": "dust", "severity": "WARN", "mask": mask},
+    ]
+
+    annotated = draw_aoi_overlay(frame, detections, mask_alpha=0.5)
+
+    np.testing.assert_array_equal(annotated[0, 0], (0, 128, 192))
