@@ -229,3 +229,14 @@ def test_overlay_reports_non_numeric_bbox_values() -> None:
             frame,
             [{"bbox": ["left", 1, 6, 6], "label": "scratch"}],
         )
+
+
+def test_overlay_rejects_non_numeric_mask() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    detection = {
+        "bbox": [1, 1, 6, 6],
+        "label": "scratch",
+        "mask": np.full((4, 4), "mask", dtype=object),
+    }
+    with pytest.raises(ValueError, match="numeric or boolean"):
+        draw_aoi_overlay(frame, [detection])
