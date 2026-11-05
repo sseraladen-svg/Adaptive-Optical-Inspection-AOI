@@ -107,3 +107,18 @@ def test_empty_mask_does_not_color_pixels_outside_bbox() -> None:
     annotated = draw_aoi_overlay(frame, [detection])
 
     np.testing.assert_array_equal(annotated[0, 0], (0, 0, 0))
+
+
+def test_boolean_mask_is_rendered() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    mask = np.zeros((8, 8), dtype=bool)
+    mask[3, 3] = True
+    detection = {
+        "bbox": [1, 1, 6, 6],
+        "label": "scratch",
+        "mask": mask,
+    }
+
+    annotated = draw_aoi_overlay(frame, [detection], mask_alpha=1.0)
+
+    np.testing.assert_array_equal(annotated[3, 3], (0, 0, 255))
