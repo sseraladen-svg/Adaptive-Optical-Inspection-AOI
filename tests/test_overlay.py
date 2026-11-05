@@ -71,3 +71,15 @@ def test_overlay_ignores_bbox_outside_frame() -> None:
         [{"bbox": [20, 20, 24, 24], "label": "scratch"}],
     )
     np.testing.assert_array_equal(annotated, frame)
+
+
+@pytest.mark.parametrize("confidence", [-0.1, 1.1, float("nan")])
+def test_overlay_rejects_invalid_confidence(confidence: float) -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    detection = {
+        "bbox": [1, 1, 6, 6],
+        "label": "scratch",
+        "confidence": confidence,
+    }
+    with pytest.raises(ValueError, match="confidence"):
+        draw_aoi_overlay(frame, [detection])

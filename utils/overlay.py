@@ -85,6 +85,8 @@ def draw_aoi_overlay(
         confidence = float(
             detection.get("cnn_confidence", detection.get("confidence", 0.0))
         )
+        if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+            raise ValueError(f"detection confidence must be in [0, 1]: {confidence}")
         cv2.putText(
             output,
             f"{label}:{confidence:.2f}",
