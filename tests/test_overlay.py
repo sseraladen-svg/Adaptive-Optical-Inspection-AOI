@@ -29,3 +29,9 @@ def test_mask_uses_alpha_blend_only_inside_mask(
     np.testing.assert_array_equal(annotated[3, 3], expected_color)
     np.testing.assert_array_equal(annotated[0, 0], (0, 0, 0))
     np.testing.assert_array_equal(frame, np.zeros_like(frame))
+
+
+def test_overlay_rejects_non_finite_mask_alpha() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="mask_alpha"):
+        draw_aoi_overlay(frame, [], mask_alpha=float("nan"))
