@@ -137,3 +137,17 @@ def test_mask_is_resized_to_frame_dimensions() -> None:
     annotated = draw_aoi_overlay(frame, [detection], mask_alpha=1.0)
 
     assert tuple(annotated[1, 1]) == (0, 0, 255)
+
+
+def test_zero_mask_alpha_disables_mask_fill() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    mask = np.ones((8, 8), dtype=np.uint8)
+    detection = {
+        "bbox": [2, 2, 5, 5],
+        "label": "scratch",
+        "mask": mask,
+    }
+
+    annotated = draw_aoi_overlay(frame, [detection], mask_alpha=0.0)
+
+    np.testing.assert_array_equal(annotated[0, 0], (0, 0, 0))
