@@ -94,3 +94,16 @@ def test_overlay_rejects_non_finite_mask() -> None:
     }
     with pytest.raises(ValueError, match="finite"):
         draw_aoi_overlay(frame, [detection])
+
+
+def test_empty_mask_does_not_color_pixels_outside_bbox() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    detection = {
+        "bbox": [2, 2, 5, 5],
+        "label": "scratch",
+        "mask": np.zeros((4, 4), dtype=np.uint8),
+    }
+
+    annotated = draw_aoi_overlay(frame, [detection])
+
+    np.testing.assert_array_equal(annotated[0, 0], (0, 0, 0))
