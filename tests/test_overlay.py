@@ -83,3 +83,14 @@ def test_overlay_rejects_invalid_confidence(confidence: float) -> None:
     }
     with pytest.raises(ValueError, match="confidence"):
         draw_aoi_overlay(frame, [detection])
+
+
+def test_overlay_rejects_non_finite_mask() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    detection = {
+        "bbox": [1, 1, 6, 6],
+        "label": "scratch",
+        "mask": np.full((4, 4), np.nan, dtype=np.float32),
+    }
+    with pytest.raises(ValueError, match="finite"):
+        draw_aoi_overlay(frame, [detection])

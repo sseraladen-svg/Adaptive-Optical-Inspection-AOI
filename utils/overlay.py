@@ -63,6 +63,8 @@ def draw_aoi_overlay(
             mask_array = np.asarray(mask)
             if mask_array.ndim != 2:
                 raise ValueError("detection mask must be a two-dimensional array")
+            if not np.all(np.isfinite(mask_array)):
+                raise ValueError("detection mask must contain only finite values")
             resized_mask = cv2.resize(
                 mask_array.astype(np.float32),
                 (width, height),
