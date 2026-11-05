@@ -151,3 +151,18 @@ def test_zero_mask_alpha_disables_mask_fill() -> None:
     annotated = draw_aoi_overlay(frame, [detection], mask_alpha=0.0)
 
     np.testing.assert_array_equal(annotated[0, 0], (0, 0, 0))
+
+
+def test_mask_alpha_blends_with_existing_frame_color() -> None:
+    frame = np.full((8, 8, 3), 255, dtype=np.uint8)
+    mask = np.zeros((8, 8), dtype=np.uint8)
+    mask[0, 0] = 1
+    detection = {
+        "bbox": [2, 2, 5, 5],
+        "label": "scratch",
+        "mask": mask,
+    }
+
+    annotated = draw_aoi_overlay(frame, [detection], mask_alpha=0.25)
+
+    np.testing.assert_array_equal(annotated[0, 0], (191, 191, 255))
