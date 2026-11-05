@@ -213,3 +213,10 @@ def test_overlapping_masks_blend_in_detection_order() -> None:
     annotated = draw_aoi_overlay(frame, detections, mask_alpha=0.5)
 
     np.testing.assert_array_equal(annotated[0, 0], (0, 128, 192))
+
+
+@pytest.mark.parametrize("bbox", [None, "1,2,3,4", [1, 2, 3]])
+def test_overlay_rejects_malformed_bbox_container(bbox: object) -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="four-value bbox"):
+        draw_aoi_overlay(frame, [{"bbox": bbox, "label": "scratch"}])  # type: ignore[list-item]
