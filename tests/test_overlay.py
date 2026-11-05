@@ -45,3 +45,10 @@ def test_overlay_rejects_empty_frame() -> None:
 def test_overlay_requires_detection_list() -> None:
     with pytest.raises(TypeError, match="detections must be a list"):
         draw_aoi_overlay(np.zeros((8, 8, 3), dtype=np.uint8), None)  # type: ignore[arg-type]
+
+
+def test_overlay_rejects_non_finite_bbox() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    detection = {"bbox": [1, 1, np.inf, 6], "label": "scratch"}
+    with pytest.raises(ValueError, match="finite"):
+        draw_aoi_overlay(frame, [detection])
