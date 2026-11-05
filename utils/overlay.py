@@ -41,6 +41,8 @@ def draw_aoi_overlay(
     output = frame.copy()
     height, width = output.shape[:2]
     for detection in detections:
+        if not isinstance(detection, dict):
+            raise TypeError("each detection must be a mapping")
         bbox_values = detection.get("bbox")
         if not isinstance(bbox_values, (list, tuple)) or len(bbox_values) != 4:
             raise ValueError("each detection must contain a four-value bbox")

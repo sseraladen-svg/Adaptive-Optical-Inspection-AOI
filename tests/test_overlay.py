@@ -240,3 +240,9 @@ def test_overlay_rejects_non_numeric_mask() -> None:
     }
     with pytest.raises(ValueError, match="numeric or boolean"):
         draw_aoi_overlay(frame, [detection])
+
+
+def test_overlay_requires_detection_mappings() -> None:
+    frame = np.zeros((8, 8, 3), dtype=np.uint8)
+    with pytest.raises(TypeError, match="each detection must be a mapping"):
+        draw_aoi_overlay(frame, [None])  # type: ignore[list-item]
